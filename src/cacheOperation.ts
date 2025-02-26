@@ -66,7 +66,7 @@ export class CacheOperation {
             return element !== taskId
         })
         const newTodoistCount = metadata.todoistCount - 1
-        const newMetadata = {}
+        const newMetadata:any = {}
         newMetadata.todoistTasks = newTodoistTasks
         newMetadata.todoistCount = newTodoistCount
     }
