@@ -3,8 +3,9 @@
 Create, edit and delete tasks from within Obsidian.md to your Todoist.
 
 > [!WARNING]
-> This is a fork from the [Ultimate Todoist Sync plugin for Obsidian](https://github.com/HeroBlackInk/ultimate-todoist-sync-for-obsidian). I'm still working on fixing some things, but the main feature should be working. I'm considering this feature a beta. Feel free to contribute.
->
+> This is a fork from the [Another Simple Todoist Sync for Obsidian (BETA)](https://github.com/eudennis/ultimate-todoist-sync-for-obsidian-experiment). I have only added a setting for enabling Reminder plugin (`(@YYYY-MM-DD HH:MM)`) based sync. Anything can break - I have kept it as sane as possible. At some point in time, I might integrate it in eudennis's repository, but I don't have the time yet. If you are up for it, please go for it and mention me somewhere :)
+
+> [!WARNING]
 > _Some features works only Todoist -> Obsidian, others by-directional. Find more details on the feature table below._
 
 ![Alt Text](/attachment/new_demo.gif)
