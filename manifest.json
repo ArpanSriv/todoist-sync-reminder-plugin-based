@@ -1,7 +1,7 @@
 {
   "id": "todoist-reminder-plugin-based",
   "name": "Todist (Reminder Plugin Based)",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "minAppVersion": "1.0.0",
   "description": "Sync reminder plugin based with Todoist from within your notes.",
   "author": "ArpanSriv",
