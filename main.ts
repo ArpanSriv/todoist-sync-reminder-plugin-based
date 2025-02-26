@@ -53,24 +53,24 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 		this.lastLines = new Map();
 
 		// Create a syncLock effect to prevent sync of tasks while Obsidian is still indexing files and downloading updates
-		let initialSyncIsLocked:boolean;
+		let initialSyncIsLocked: boolean;
 
 		function runAfter60Seconds() {
 			initialSyncIsLocked = false;
 			// Place your event code here
 		}
-				
+
 		function startCounter() {
 			setTimeout(() => {
-			runAfter60Seconds();
+				runAfter60Seconds();
 			}, 60000); // 60 seconds
 		}
 
-		if(this.settings.delayedSync) {
+		if (this.settings.delayedSync) {
 			// Start the counter
 			initialSyncIsLocked = true
 			startCounter();
-				
+
 		}
 
 
@@ -87,57 +87,57 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 				return
 			}
 
-			if (evt.key === 'ArrowUp' || evt.key === 'ArrowDown' || evt.key === 'ArrowLeft' || evt.key === 'ArrowRight' ||evt.key === 'PageUp' || evt.key === 'PageDown') {
-				if(initialSyncIsLocked){
+			if (evt.key === 'ArrowUp' || evt.key === 'ArrowDown' || evt.key === 'ArrowLeft' || evt.key === 'ArrowRight' || evt.key === 'PageUp' || evt.key === 'PageDown') {
+				if (initialSyncIsLocked) {
 					return
 				}
 				// TODO for some reason, in some cases, without this wait, the task is deleted just after the task is created. Still didnt found why
 				await new Promise(resolve => setTimeout(resolve, 10000));
 				//console.log(`${evt.key} arrow key is released`);
-				if(!( this.checkModuleClass())){
+				if (!(this.checkModuleClass())) {
 					return
 				}
 				this.lineNumberCheck()
 			}
 
-			if(evt.key === 'Enter'){
+			if (evt.key === 'Enter') {
 
 				// if the plugin settings for sync is enabled, it won't sync for the first 60 seconds
-				if(initialSyncIsLocked){
+				if (initialSyncIsLocked) {
 					return
 				}
 				// Check if the line has a task when the user hits "enter" (to select a tag)
 				// TODO needs to modify lineContentNewTaskCheck to accept if is the current ore previous line, so when the user jumps to the next line, we can check for a task within the previous line
-				try{
+				try {
 					const editor = this.app.workspace.activeEditor?.editor
 					const view = this.app.workspace.getActiveViewOfType(MarkdownView)
 
-					if(!this.settings.apiInitialized){
+					if (!this.settings.apiInitialized) {
 						return
 					}
-		
+
 					this.lineNumberCheck()
-					if(!(this.checkModuleClass())){
+					if (!(this.checkModuleClass())) {
 						return
 					}
-					if(this.settings.enableFullVaultSync){
+					if (this.settings.enableFullVaultSync) {
 						return
 					}
 					if (!await this.checkAndHandleSyncLock()) return;
-					if(view){
-						await this.todoistSync?.lineContentNewTaskCheck(editor,view)
+					if (view) {
+						await this.todoistSync?.lineContentNewTaskCheck(editor, view)
 					}
 					this.syncLock = false
 					this.saveSettings()
-	
-				}catch(error){
+
+				} catch (error) {
 					console.error(`An error occurred while check new task in line: ${error.message}`);
 					this.syncLock = false
 				}
 			}
 
 			if (evt.key === "Delete" || evt.key === "Backspace" || evt.key === "Del") {
-				if(initialSyncIsLocked){
+				if (initialSyncIsLocked) {
 					return
 				}
 				try {
@@ -186,27 +186,27 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 		});
 
 		//hook editor-change 事件，如果当前line包含 #todoist,说明有new task
-		this.registerEvent(this.app.workspace.on('editor-change',async (editor,view:MarkdownView)=>{
+		this.registerEvent(this.app.workspace.on('editor-change', async (editor, view: MarkdownView) => {
 			// TODO for some reason, in some cases, without this wait, the task is deleted just after the task is created. Still didnt found why
 			await new Promise(resolve => setTimeout(resolve, 10000));
-			try{
-				if(!this.settings.apiInitialized){
+			try {
+				if (!this.settings.apiInitialized) {
 					return
 				}
-	
+
 				this.lineNumberCheck()
-				if(!(this.checkModuleClass())){
+				if (!(this.checkModuleClass())) {
 					return
 				}
-				if(this.settings.enableFullVaultSync){
+				if (this.settings.enableFullVaultSync) {
 					return
 				}
 				if (!await this.checkAndHandleSyncLock()) return;
-				await this.todoistSync?.lineContentNewTaskCheck(editor,view)
+				await this.todoistSync?.lineContentNewTaskCheck(editor, view)
 				this.syncLock = false
 				this.saveSettings()
 
-			}catch(error){
+			} catch (error) {
 				console.error(`An error occurred while check new task in line: ${error.message}`);
 				this.syncLock = false
 			}
@@ -301,21 +301,21 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 			id: 'asts-trigger-manual-sync',
 			name: 'Trigger the Manual Sync',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				if(!view) {
+				if (!view) {
 					return
 				}
 				// let filepath
-				if(view.file) {
+				if (view.file) {
 					// filepath = view.file.path
-					if(!this.settings.apiInitialized) {
+					if (!this.settings.apiInitialized) {
 						new Notice('Please set the Todoist api first')
 						return
 					}
-					try{
+					try {
 						this.scheduledSynchronization()
 						this.syncLock = false
 					}
-					catch(error) {
+					catch (error) {
 						new Notice(`An error occurred while syncing.:${error}`)
 						this.syncLock = false
 					}
@@ -458,7 +458,7 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 		this.todoistSync = new TodoistSync(this.app, this)
 
 
-		if(this.settings.debugMode){console.log(`Another Simple Todoist Sync plugin: version ${this.manifest.version} (requires obsidian ${this.manifest.minAppVersion})`);}
+		if (this.settings.debugMode) { console.log(`Another Simple Todoist Sync plugin: version ${this.manifest.version} (requires obsidian ${this.manifest.minAppVersion})`); }
 	}
 
 
@@ -597,8 +597,8 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 		if (!(this.checkModuleClass())) {
 			return;
 		}
-		
-		{{console.log("Todoist scheduled synchronization task started at", new Date().toLocaleString());}}
+
+		{ { console.log("Todoist scheduled synchronization task started at", new Date().toLocaleString()); } }
 		try {
 			if (!await this.checkAndHandleSyncLock()) return;
 			try {
@@ -674,6 +674,21 @@ export default class AnotherSimpleTodoistSync extends Plugin {
 		this.syncLock = true;
 		return true;
 	}
+
+	
+    isParseableItem(line_text: string): boolean {
+        if (this.settings.enableReminderPluginBasedSync) {
+            if (this.taskParser?.isReminderTask(line_text)) {
+                return true
+            }
+        }
+
+        if (this.taskParser?.hasTodoistTag(line_text)) {
+            return true
+        }
+
+        return false
+    }
 
 }
 

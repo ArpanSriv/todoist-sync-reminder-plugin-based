@@ -20,8 +20,8 @@ export class TodoistSync {
     }
 
     // Check if the file has "tasks" without links
-    checkForTasksWithoutLink(){
-        
+    checkForTasksWithoutLink() {
+
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         const currentFileValue = view?.data
         const regexTags = /#tdsync/gm
@@ -30,7 +30,8 @@ export class TodoistSync {
         const countTags = currentFileValue?.match(regexTags)
         const countLinks = currentFileValue?.match(regexLinks)
 
-        if(countLinks?.length === countTags?.length){
+
+        if (countLinks?.length === countTags?.length) {
             return false
         } else {
             return true
@@ -42,10 +43,10 @@ export class TodoistSync {
     async deletedTaskCheck(file_path: string): Promise<void> {
 
         const hasEmptyTasks = this.checkForTasksWithoutLink()
-        if(hasEmptyTasks){
+        if (hasEmptyTasks) {
             return
         }
-        
+
 
         let file
         let currentFileValue
@@ -96,7 +97,7 @@ export class TodoistSync {
             .map(async (taskId: any) => {
 
                 // If the taskId was not found within the file, delete it.
-                if(!currentFileValueWithOutFrontMatter?.includes(taskId)){
+                if (!currentFileValueWithOutFrontMatter?.includes(taskId)) {
                     try {
                         const api = this.plugin.todoistRestAPI?.initializeAPI()
                         if (!api) {
@@ -105,9 +106,9 @@ export class TodoistSync {
                             return
                         }
                         const response = await api.deleteTask(taskId);
-    
+
                         if (response) {
-                            if(this.plugin.settings.debugMode){console.log(`Task ${taskId} was deleted.`)}
+                            if (this.plugin.settings.debugMode) { console.log(`Task ${taskId} was deleted.`) }
                             new Notice(`Task ${taskId} was deleted`)
                             return taskId; // 返回被删除的任务 ID
                         }
@@ -159,80 +160,88 @@ export class TodoistSync {
         }
 
         //添加task
-        if ((!this.plugin.taskParser?.hasTodoistId(linetxt) && this.plugin.taskParser?.hasTodoistTag(linetxt))) {   //是否包含#todoist
+        if (!this.plugin.taskParser?.hasTodoistId(linetxt)) {   //是否包含#todoist
 
-            const currentTask = await this.plugin.taskParser?.convertTextToTodoistTaskObject(linetxt, filepath, line, fileContent)
+            if (this.plugin.isParseableItem(linetxt)) {
 
-            try {
-                const newTask = await this.plugin.todoistRestAPI?.AddTask(currentTask)
-                if (!newTask) {
-                    console.error('Failed to add new task');
-                    return;
-                }
-                const { id: todoist_id } = newTask;
-                (newTask as any).path = filepath;
-                if(this.plugin.settings.debugMode){
-                    console.log(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
-                }
-                new Notice(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
-                //newTask写入缓存
-                this.plugin.cacheOperation?.appendTaskToCache(newTask)
-                this.plugin.cacheOperation?.appendPathToTaskInCache(todoist_id,filepath)
+                const currentTask = await this.plugin.taskParser?.convertTextToTodoistTaskObject(linetxt, filepath, line, fileContent)
 
-                //如果任务已完成
-                if (currentTask.isCompleted === true) {
-                    await this.plugin.todoistRestAPI?.CloseTask(newTask.id)
-                    this.plugin.cacheOperation?.closeTaskToCacheByID(todoist_id)
+                try {
+                    const newTask = await this.plugin.todoistRestAPI?.AddTask(currentTask)
+                    if (!newTask) {
+                        console.error('Failed to add new task');
+                        return;
+                    }
+                    const { id: todoist_id } = newTask;
+                    (newTask as any).path = filepath;
+                    if (this.plugin.settings.debugMode) {
+                        console.log(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
+                    }
+                    new Notice(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
+                    //newTask写入缓存
+                    this.plugin.cacheOperation?.appendTaskToCache(newTask)
+                    this.plugin.cacheOperation?.appendPathToTaskInCache(todoist_id, filepath)
 
-                }
-                this.plugin.saveSettings()
+                    //如果任务已完成
+                    if (currentTask.isCompleted === true) {
+                        await this.plugin.todoistRestAPI?.CloseTask(newTask.id)
+                        this.plugin.cacheOperation?.closeTaskToCacheByID(todoist_id)
 
-                //todoist id 保存到 任务后面
-                const text_with_out_link = `${linetxt}`;
-                let link;
-                    if(this.plugin.settings.linksAppURI){
+                    }
+                    this.plugin.saveSettings()
+
+                    //todoist id 保存到 任务后面
+                    const text_with_out_link = `${linetxt}`;
+                    let link;
+                    if (this.plugin.settings.linksAppURI) {
                         link = `%%[tid:: [${todoist_id}](todoist://task?id=${newTask.id})]%%`
                     } else {
                         link = `%%[tid:: [${todoist_id}](${newTask.url})]%%`
                     }
-                const text = this.plugin.taskParser?.addTodoistLink(text_with_out_link, link)
-                const from = { line: cursor.line, ch: 0 };
-                const to = { line: cursor.line, ch: linetxt.length };
-                view.app.workspace.activeEditor?.editor?.replaceRange(text, from, to)
+                    const text = this.plugin.taskParser?.addTodoistLink(text_with_out_link, link)
+                    const from = { line: cursor.line, ch: 0 };
+                    const to = { line: cursor.line, ch: linetxt.length };
+                    view.app.workspace.activeEditor?.editor?.replaceRange(text, from, to)
+                    if (this.plugin.settings.debugMode) {
+                        console.log("Updated text: " + text)
+                    }
 
-                //处理frontMatter
-                try {
-                    // 处理 front matter
-                    const frontMatter = await this.plugin.cacheOperation?.getFileMetadata(filepath)
+                    //处理frontMatter
+                    try {
+                        // 处理 front matter
+                        const frontMatter = await this.plugin.cacheOperation?.getFileMetadata(filepath)
 
-                    // 将 todoistCount 加 1
-                    const newFrontMatter = { ...frontMatter };
-                    newFrontMatter.todoistCount = (newFrontMatter.todoistCount ?? 0) + 1;
+                        // 将 todoistCount 加 1
+                        const newFrontMatter = { ...frontMatter };
+                        newFrontMatter.todoistCount = (newFrontMatter.todoistCount ?? 0) + 1;
 
-                    // 记录 taskID
-                    newFrontMatter.todoistTasks = [...(newFrontMatter.todoistTasks || []), todoist_id];
+                        // 记录 taskID
+                        newFrontMatter.todoistTasks = [...(newFrontMatter.todoistTasks || []), todoist_id];
 
-                    // 更新 front matter
-                    /*
-                   this.plugin.fileOperation?.updateFrontMatter(view.file, (frontMatter) => {
-                      frontMatter.todoistTasks = newFrontMatter.todoistTasks;
-                      frontMatter.todoistCount = newFrontMatter.todoistCount;
-                    });
-                    */
-                    await this.plugin.cacheOperation?.updateFileMetadata(filepath, newFrontMatter)
+                        // 更新 front matter
+                        /*
+                       this.plugin.fileOperation?.updateFrontMatter(view.file, (frontMatter) => {
+                          frontMatter.todoistTasks = newFrontMatter.todoistTasks;
+                          frontMatter.todoistCount = newFrontMatter.todoistCount;
+                        });
+                        */
+                        await this.plugin.cacheOperation?.updateFileMetadata(filepath, newFrontMatter)
 
 
+
+                    } catch (error) {
+                        console.error(error);
+                    }
 
                 } catch (error) {
-                    console.error(error);
+                    console.error(`Error adding task in the file ${filepath}:`, error);
+                    return
                 }
 
-            } catch (error) {
-                console.error(`Error adding task in the file ${filepath}:`, error);
-                return
             }
 
         }
+
     }
 
 
@@ -296,60 +305,61 @@ export class TodoistSync {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
-            if (!this.plugin.taskParser?.hasTodoistId(line) && this.plugin.taskParser?.hasTodoistTag(line)) {
+            if (!this.plugin.taskParser?.hasTodoistId(line)) {
+                if (this.plugin.isParseableItem(line)) {
 
-                const currentTask = await this.plugin.taskParser?.convertTextToTodoistTaskObject(line, filepath, i, content)
-                if (typeof currentTask === "undefined") {
-                    continue
+                    const currentTask = await this.plugin.taskParser?.convertTextToTodoistTaskObject(line, filepath, i, content)
+                    if (typeof currentTask === "undefined") {
+                        continue
+                    }
+
+                    try {
+                        const newTask = await this.plugin.todoistRestAPI?.AddTask(currentTask)
+                        // const { id: todoist_id } = newTask;
+                        const todoist_id = newTask?.id;
+                        if (!newTask) {
+                            console.error('Failed to add new task');
+                            new Notice('Failed to add new task')
+                            return
+                        }
+                        if (this.plugin.settings.debugMode) {
+                            console.log(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
+                        }
+                        new Notice(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
+                        //newTask写入json文件
+                        this.plugin.cacheOperation?.appendTaskToCache(newTask)
+                        this.plugin.cacheOperation?.appendPathToTaskInCache(todoist_id, filepath)
+
+                        //如果任务已完成
+                        if (currentTask.isCompleted === true) {
+                            await this.plugin.todoistRestAPI?.CloseTask(newTask.id)
+                            this.plugin.cacheOperation?.closeTaskToCacheByID(todoist_id ?? '')
+                        }
+                        this.plugin.saveSettings()
+
+                        //todoist id 保存到 任务后面
+                        const text_with_out_link = `${line}`;
+                        let link;
+                        if (this.plugin.settings.linksAppURI) {
+                            link = `%%[tid:: [${todoist_id}](todoist://task?id=${newTask.id})]%%`
+                        } else {
+                            link = `%%[tid:: [${todoist_id}](${newTask.url})]%%`
+                        }
+                        const text = this.plugin.taskParser?.addTodoistLink(text_with_out_link, link)
+                        lines[i] = text;
+
+                        newFrontMatter.todoistCount = (newFrontMatter.todoistCount ?? 0) + 1;
+
+                        // 记录 taskID
+                        newFrontMatter.todoistTasks = [...(newFrontMatter.todoistTasks || []), todoist_id];
+
+                        hasNewTask = true
+
+                    } catch (error) {
+                        console.error('Error adding task:', error);
+                        continue
+                    }
                 }
-
-                try {
-                    const newTask = await this.plugin.todoistRestAPI?.AddTask(currentTask)
-                    // const { id: todoist_id } = newTask;
-                    const todoist_id = newTask?.id;
-                    if (!newTask) {
-                        console.error('Failed to add new task');
-                        new Notice('Failed to add new task')
-                        return
-                    }
-                    if(this.plugin.settings.debugMode){
-                        console.log(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
-                    }
-                    new Notice(`New task "${newTask.content}" added. Task ID: ${newTask.id}`)
-                    //newTask写入json文件
-                    this.plugin.cacheOperation?.appendTaskToCache(newTask)
-                    this.plugin.cacheOperation?.appendPathToTaskInCache(todoist_id,filepath)
-
-                    //如果任务已完成
-                    if (currentTask.isCompleted === true) {
-                        await this.plugin.todoistRestAPI?.CloseTask(newTask.id)
-                        this.plugin.cacheOperation?.closeTaskToCacheByID(todoist_id ?? '')
-                    }
-                    this.plugin.saveSettings()
-
-                    //todoist id 保存到 任务后面
-                    const text_with_out_link = `${line}`;
-                    let link;
-                    if(this.plugin.settings.linksAppURI){
-                        link = `%%[tid:: [${todoist_id}](todoist://task?id=${newTask.id})]%%`
-                    } else {
-                        link = `%%[tid:: [${todoist_id}](${newTask.url})]%%`
-                    }
-                    const text = this.plugin.taskParser?.addTodoistLink(text_with_out_link, link)
-                    lines[i] = text;
-
-                    newFrontMatter.todoistCount = (newFrontMatter.todoistCount ?? 0) + 1;
-
-                    // 记录 taskID
-                    newFrontMatter.todoistTasks = [...(newFrontMatter.todoistTasks || []), todoist_id];
-
-                    hasNewTask = true
-
-                } catch (error) {
-                    console.error('Error adding task:', error);
-                    continue
-                }
-
             }
         }
         if (hasNewTask) {
@@ -390,202 +400,202 @@ export class TodoistSync {
         }
 
         //检查task
-        if (this.plugin.taskParser?.hasTodoistId(lineText) && this.plugin.taskParser?.hasTodoistTag(lineText)) {
+        if (this.plugin.taskParser?.hasTodoistId(lineText)) {
+            if (this.plugin.isParseableItem(lineText)) {
+                const lineTask = await this.plugin.taskParser?.convertTextToTodoistTaskObject(lineText, filepath, lineNumber, fileContent)
+                const lineTask_todoist_id = (lineTask.todoist_id).toString()
+                const savedTask = await this.plugin.cacheOperation?.loadTaskFromCacheyID(lineTask_todoist_id)  //dataview中 id为数字，todoist中id为字符串，需要转换
+                if (!savedTask) {
+                    return
+                }
 
-            const lineTask = await this.plugin.taskParser?.convertTextToTodoistTaskObject(lineText, filepath, lineNumber, fileContent)
-            const lineTask_todoist_id = (lineTask.todoist_id).toString()
-            const savedTask = await this.plugin.cacheOperation?.loadTaskFromCacheyID(lineTask_todoist_id)  //dataview中 id为数字，todoist中id为字符串，需要转换
-            if (!savedTask) {
-                return
+                //检查内容是否修改
+                const lineTaskContent = lineTask.content;
+
+                //content 是否修改
+                // The content is compared and inverts the value received 
+                const contentModified = !this.plugin.taskParser?.taskContentCompare(lineTask, savedTask)
+                //tag or labels 是否修改
+                const tagsModified = !this.plugin.taskParser?.taskTagCompare(lineTask, savedTask)
+                //project 是否修改
+                const projectModified = !(await this.plugin.taskParser?.taskProjectCompare(lineTask, savedTask))
+                //status 是否修改
+                const statusModified = !this.plugin.taskParser?.taskStatusCompare(lineTask, savedTask)
+                // Check if the dueDate was modified
+                const dueDateModified = (await this.plugin.taskParser?.compareTaskDueDate(lineTask, savedTask))
+                //parent id 是否修改
+                const parentIdModified = !(lineTask.parentId === savedTask.parentId)
+                //check priority
+                // TODO priority is always returning 1 when should be false
+                const priorityModified = !(lineTask.priority === savedTask.priority)
+                // check if the reminder time has changed
+                const dueTimeModified = (await this.plugin.taskParser?.compareTaskDueTime(lineTask, savedTask))
+                // check if the dyration time has changed
+                // will return true or false depending on the finding
+                const durationTimeModified = (await this.plugin.taskParser?.compareTaskDuration(lineTask, savedTask))
+                // Using the sectionId, compares the name of both sections. Returns true if they are different
+                const sectionModified = (await this.plugin.taskParser?.compareSection(lineTask, savedTask))
+
+                try {
+                    let contentChanged = false;
+                    let tagsChanged = false;
+                    const projectChanged = false;
+                    let statusChanged = false;
+                    let dueDateChanged = false;
+                    let dueTimeChanged = false;
+                    const parentIdChanged = false;
+                    let priorityChanged = false;
+                    let durationChanged = false;
+                    // let sectionChanged = false;
+
+                    const updatedContent: { content?: string, labels?: string[], dueString?: string, dueDate?: string, dueTime?: string, projectId?: string, parentId?: string, priority?: number, duration?: string, path?: string, sectionId?: string } = {
+                    }
+
+
+                    if (contentModified) {
+                        updatedContent.content = lineTaskContent
+                        contentChanged = true;
+                    }
+
+                    if (tagsModified) {
+                        updatedContent.labels = lineTask.labels
+                        tagsChanged = true;
+                    }
+
+                    // if the Due date was modified, update to the new due date
+                    if (dueDateModified) {
+                        if (lineTask.dueDate === "") {
+                            updatedContent.dueString = "no date"
+
+                        }
+
+                        updatedContent.dueDate = lineTask.dueDate;
+                        updatedContent.dueTime = lineTask.dueTime;
+                        dueDateChanged = true;
+                        // }
+
+                    }
+
+                    if (dueTimeModified) {
+
+                        if (lineTask.dueTime === "") {
+                            updatedContent.dueString = ""
+
+                        }
+                        updatedContent.dueDate = lineTask.dueDate;
+                        updatedContent.dueTime = lineTask.dueTime;
+                        dueTimeChanged = true;
+                    }
+
+                    if (durationTimeModified) {
+                        // TODO: Add the duration time to the updatedContent object
+                        updatedContent.duration = lineTask.duration;
+
+                        // TODO : Add the duration unit to the updatedContent object
+                        durationChanged = true;
+
+                    }
+
+                    //todoist Rest api 没有 move task to new project的功能
+                    if (projectModified) {
+                        //updatedContent.projectId = lineTask.projectId
+                        //projectChanged = false;
+                    }
+
+                    //todoist Rest api 没有修改 parent id 的借口
+                    if (parentIdModified) {
+                        //updatedContent.parentId = lineTask.parentId
+                        //parentIdChanged = false;
+                    }
+
+                    if (priorityModified) {
+
+                        updatedContent.priority = lineTask.priority
+                        priorityChanged = true;
+                    }
+
+                    // If the section was modified, it moves the task to the new section and update the cache
+                    if (sectionModified) {
+                        this.plugin.todoistSyncAPI?.moveTaskToAnotherSection(lineTask.todoist_id, lineTask.sectionId)
+                        this.plugin.cacheOperation?.updateTaskSectionOnCacheById(lineTask.todoist_id, lineTask.sectionId)
+                        new Notice(`Task ${lineTask.todoist_id} moved to ${lineTask.sectionId}.`)
+                    }
+
+
+
+                    if (contentChanged || tagsChanged || dueDateChanged || projectChanged || parentIdChanged || priorityChanged || dueTimeChanged || durationChanged) {
+
+
+                        // Here it calls the updateTask in todoistRestAPI with the content
+                        const updatedTask = await this.plugin.todoistRestAPI?.UpdateTask(lineTask.todoist_id.toString(), {
+                            ...updatedContent,
+                            priority: Number(lineTask.priority)
+                        })
+                        if (updatedTask) {
+                            (updatedTask as any).path = filepath;
+                            this.plugin.cacheOperation?.updateTaskToCacheByID(updatedTask);
+                        }
+                    }
+
+                    if (statusModified) {
+                        if (lineTask.isCompleted === true) {
+                            this.plugin.todoistRestAPI?.CloseTask(lineTask.todoist_id.toString());
+                            this.plugin.cacheOperation?.closeTaskToCacheByID(lineTask.todoist_id.toString());
+                        } else {
+                            this.plugin.todoistRestAPI?.OpenTask(lineTask.todoist_id.toString());
+                            this.plugin.cacheOperation?.reopenTaskToCacheByID(lineTask.todoist_id.toString());
+                        }
+
+                        statusChanged = true;
+                    }
+
+
+
+                    if (contentChanged || statusChanged || dueDateChanged || tagsChanged || projectChanged || priorityChanged || dueTimeChanged || durationChanged) {
+                        this.plugin.saveSettings()
+                        let message = `Task ${lineTask_todoist_id} is updated.`;
+
+                        if (contentChanged) {
+                            message += " Content was changed.";
+                        }
+                        if (statusChanged) {
+                            message += " Status was changed.";
+                        }
+                        if (dueDateChanged) {
+                            message += " Due date was changed.";
+                        }
+                        if (dueTimeChanged) {
+                            message += " Due time was changed.";
+                        }
+                        if (tagsChanged) {
+                            message += " Tags were changed.";
+                        }
+                        if (projectChanged) {
+                            message += " Project was changed.";
+                        }
+                        if (priorityChanged) {
+                            message += " Priority was changed.";
+                        }
+                        if (durationChanged) {
+                            message += " Duration was changed.";
+                        }
+                        // if (sectionChanged) {
+                        //     message += " Section was changed.";
+                        // }
+
+
+                        if (!lineTask_todoist_id === null) {
+                            if (this.plugin.settings.debugMode) { console.log("Sent a Notice with the message: " + message) }
+                            new Notice(message);
+                        }
+
+                    }
+
+                } catch (error) {
+                    console.error('Error updating task:', error);
+                }
+
             }
-
-            //检查内容是否修改
-            const lineTaskContent = lineTask.content;
-
-            //content 是否修改
-            // The content is compared and inverts the value received 
-            const contentModified = !this.plugin.taskParser?.taskContentCompare(lineTask, savedTask)
-            //tag or labels 是否修改
-            const tagsModified = !this.plugin.taskParser?.taskTagCompare(lineTask, savedTask)
-            //project 是否修改
-            const projectModified = !(await this.plugin.taskParser?.taskProjectCompare(lineTask, savedTask))
-            //status 是否修改
-            const statusModified = !this.plugin.taskParser?.taskStatusCompare(lineTask, savedTask)
-            // Check if the dueDate was modified
-            const dueDateModified = (await this.plugin.taskParser?.compareTaskDueDate(lineTask, savedTask))
-            //parent id 是否修改
-            const parentIdModified = !(lineTask.parentId === savedTask.parentId)
-            //check priority
-            // TODO priority is always returning 1 when should be false
-            const priorityModified = !(lineTask.priority === savedTask.priority)
-            // check if the reminder time has changed
-            const dueTimeModified = (await this.plugin.taskParser?.compareTaskDueTime(lineTask, savedTask))
-            // check if the dyration time has changed
-            // will return true or false depending on the finding
-            const durationTimeModified = (await this.plugin.taskParser?.compareTaskDuration(lineTask, savedTask))
-            // Using the sectionId, compares the name of both sections. Returns true if they are different
-            const sectionModified = (await this.plugin.taskParser?.compareSection(lineTask, savedTask))
-
-            try {
-                let contentChanged = false;
-                let tagsChanged = false;
-                const projectChanged = false;
-                let statusChanged = false;
-                let dueDateChanged = false;
-                let dueTimeChanged = false;
-                const parentIdChanged = false;
-                let priorityChanged = false;
-                let durationChanged = false;
-                // let sectionChanged = false;
-
-                const updatedContent: { content?: string, labels?: string[], dueString?: string, dueDate?: string, dueTime?: string, projectId?: string, parentId?: string, priority?: number, duration?: string, path?: string, sectionId?: string } = {
-                }
-
-
-                if (contentModified) {
-                    updatedContent.content = lineTaskContent
-                    contentChanged = true;
-                }
-
-                if (tagsModified) {
-                    updatedContent.labels = lineTask.labels
-                    tagsChanged = true;
-                }
-
-                // if the Due date was modified, update to the new due date
-                if (dueDateModified) {
-                    if (lineTask.dueDate === "") {
-                        updatedContent.dueString = "no date"
-
-                    }
-
-                    updatedContent.dueDate = lineTask.dueDate;
-                    updatedContent.dueTime = lineTask.dueTime;
-                    dueDateChanged = true;
-                    // }
-
-                }
-
-                if (dueTimeModified) {
-
-                    if (lineTask.dueTime === "") {
-                        updatedContent.dueString = ""
-
-                    }
-                    updatedContent.dueDate = lineTask.dueDate;
-                    updatedContent.dueTime = lineTask.dueTime;
-                    dueTimeChanged = true;
-                }
-
-                if (durationTimeModified) {
-                    // TODO: Add the duration time to the updatedContent object
-                    updatedContent.duration = lineTask.duration;
-
-                    // TODO : Add the duration unit to the updatedContent object
-                    durationChanged = true;
-
-                }
-
-                //todoist Rest api 没有 move task to new project的功能
-                if (projectModified) {
-                    //updatedContent.projectId = lineTask.projectId
-                    //projectChanged = false;
-                }
-
-                //todoist Rest api 没有修改 parent id 的借口
-                if (parentIdModified) {
-                    //updatedContent.parentId = lineTask.parentId
-                    //parentIdChanged = false;
-                }
-
-                if (priorityModified) {
-
-                    updatedContent.priority = lineTask.priority
-                    priorityChanged = true;
-                }
-
-                // If the section was modified, it moves the task to the new section and update the cache
-                if (sectionModified) {
-                    this.plugin.todoistSyncAPI?.moveTaskToAnotherSection(lineTask.todoist_id,lineTask.sectionId)
-                    this.plugin.cacheOperation?.updateTaskSectionOnCacheById(lineTask.todoist_id,lineTask.sectionId)
-                    new Notice(`Task ${lineTask.todoist_id} moved to ${lineTask.sectionId}.`)
-                }
-
-
-
-                if (contentChanged || tagsChanged || dueDateChanged || projectChanged || parentIdChanged || priorityChanged || dueTimeChanged || durationChanged) {
-
-
-                    // Here it calls the updateTask in todoistRestAPI with the content
-                    const updatedTask = await this.plugin.todoistRestAPI?.UpdateTask(lineTask.todoist_id.toString(), {
-                        ...updatedContent,
-                        priority: Number(lineTask.priority)
-                    })
-                    if (updatedTask) {
-                        (updatedTask as any).path = filepath;
-                        this.plugin.cacheOperation?.updateTaskToCacheByID(updatedTask);
-                    }
-                }
-
-                if (statusModified) {
-                    if (lineTask.isCompleted === true) {
-                        this.plugin.todoistRestAPI?.CloseTask(lineTask.todoist_id.toString());
-                        this.plugin.cacheOperation?.closeTaskToCacheByID(lineTask.todoist_id.toString());
-                    } else {
-                        this.plugin.todoistRestAPI?.OpenTask(lineTask.todoist_id.toString());
-                        this.plugin.cacheOperation?.reopenTaskToCacheByID(lineTask.todoist_id.toString());
-                    }
-
-                    statusChanged = true;
-                }
-
-
-
-                if (contentChanged || statusChanged || dueDateChanged || tagsChanged || projectChanged || priorityChanged || dueTimeChanged || durationChanged) {
-                    this.plugin.saveSettings()
-                    let message = `Task ${lineTask_todoist_id} is updated.`;
-
-                    if (contentChanged) {
-                        message += " Content was changed.";
-                    }
-                    if (statusChanged) {
-                        message += " Status was changed.";
-                    }
-                    if (dueDateChanged) {
-                        message += " Due date was changed.";
-                    }
-                    if (dueTimeChanged) {
-                        message += " Due time was changed.";
-                    }
-                    if (tagsChanged) {
-                        message += " Tags were changed.";
-                    }
-                    if (projectChanged) {
-                        message += " Project was changed.";
-                    }
-                    if (priorityChanged) {
-                        message += " Priority was changed.";
-                    }
-                    if (durationChanged) {
-                        message += " Duration was changed.";
-                    }
-                    // if (sectionChanged) {
-                    //     message += " Section was changed.";
-                    // }
-
-                    
-                    if(!lineTask_todoist_id === null) {
-                        if(this.plugin.settings.debugMode){console.log("Sent a Notice with the message: " + message)}
-                        new Notice(message);
-                    }
-
-                } 
-
-            } catch (error) {
-                console.error('Error updating task:', error);
-            }
-
-
         }
     }
 
@@ -624,13 +634,15 @@ export class TodoistSync {
 
                 for (let i = 0; i < lines?.length; i++) {
                     const line = lines[i];
-                    if (this.plugin.taskParser?.hasTodoistId(line) && this.plugin.taskParser?.hasTodoistTag(line)) {
-                        try {
-                            await this.lineModifiedTaskCheck(filepath ?? '', line, i, content ?? '');
-                            hasModifiedTask = true;
-                        } catch (error) {
-                            console.error('Error modifying task:', error);
-                            continue;
+                    if (this.plugin.taskParser?.hasTodoistId(line)) {
+                        if (this.plugin.isParseableItem(line)) {
+                            try {
+                                await this.lineModifiedTaskCheck(filepath ?? '', line, i, content ?? '');
+                                hasModifiedTask = true;
+                            } catch (error) {
+                                console.error('Error modifying task:', error);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -678,11 +690,11 @@ export class TodoistSync {
     }
 
 
-/**
-* Delete the task with the specified ID from the task list and update the JSON file
-* @param taskIds The array of task IDs to be deleted
-* @returns Returns the array of task IDs that were successfully deleted
-*/
+    /**
+    * Delete the task with the specified ID from the task list and update the JSON file
+    * @param taskIds The array of task IDs to be deleted
+    * @returns Returns the array of task IDs that were successfully deleted
+    */
     async deleteTasksByIds(taskIds: string[]): Promise<string[]> {
         const deletedTaskIds = [];
 
@@ -692,7 +704,7 @@ export class TodoistSync {
                 const response = await api?.deleteTask(taskId);
 
                 if (response) {
-                    if(this.plugin.settings.debugMode){
+                    if (this.plugin.settings.debugMode) {
                         console.log(`Task ${taskId} was deleted.`)
                     }
                     new Notice(`Task ${taskId} was deleted.`)
@@ -786,12 +798,12 @@ export class TodoistSync {
                 //如果要修改代码，让completeTaskInTheFile(e.object_id)按照顺序依次执行，可以将Promise.allSettled()方法改为使用for...of循环来处理未同步的事件。具体步骤如下：
 
                 // TODO needs to find a better way to check if a givek task has already being updated on the processedEvents
-                if (!(typeof e.extra_data.last_due_date === 'undefined') ) {
+                if (!(typeof e.extra_data.last_due_date === 'undefined')) {
                     await this.syncUpdatedTaskDueDateToObsidian(e)
                 }
 
                 // TODO needs to find a better way to check if a givek task has already being updated on the processedEvents
-                if (!(typeof e.extra_data.last_content === 'undefined') ) {
+                if (!(typeof e.extra_data.last_content === 'undefined')) {
                     await this.syncUpdatedTaskContentToObsidian(e)
                 }
 
@@ -815,7 +827,7 @@ export class TodoistSync {
         this.plugin.fileOperation?.syncUpdatedTaskContentToTheFile(e)
         const content = e.extra_data.content
         this.plugin.cacheOperation?.modifyTaskToCacheByID(e.object_id, { content })
-        if(!e.parent_item_id === null){
+        if (!e.parent_item_id === null) {
             new Notice(`The content of Task ${e.parent_item_id} has been modified.`)
         }
 
@@ -828,7 +840,7 @@ export class TodoistSync {
         if (due) {
             this.plugin.cacheOperation?.modifyTaskToCacheByID(e.object_id, { due })
         }
-        if(!e.parent_item_id === null){
+        if (!e.parent_item_id === null) {
             new Notice(`The due date of Task ${e.parent_item_id} has been modified.`)
         }
 

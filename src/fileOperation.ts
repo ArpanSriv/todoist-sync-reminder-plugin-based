@@ -34,10 +34,12 @@ export class FileOperation {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
-            if (line.includes(taskId) && this.plugin.taskParser?.hasTodoistTag(line)) {
-                lines[i] = line.replace('[ ]', '[x]')
-                modified = true
-                break
+            if (line.includes(taskId)) {
+                if (this.plugin.isParseableItem(line)) {
+                    lines[i] = line.replace('[ ]', '[x]')
+                    modified = true
+                    break
+                }
             }
         }
 
@@ -68,10 +70,12 @@ export class FileOperation {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
-            if (line.includes(taskId) && this.plugin.taskParser?.hasTodoistTag(line)) {
-                lines[i] = line.replace(/- \[(x|X)\]/g, '- [ ]');
-                modified = true
-                break
+            if (line.includes(taskId)) {
+                if (this.plugin.isParseableItem(line)) {
+                    lines[i] = line.replace(/- \[(x|X)\]/g, '- [ ]');
+                    modified = true
+                    break
+                }
             }
         }
 
@@ -82,6 +86,7 @@ export class FileOperation {
     }
 
     //add #todoist at the end of task line, if full vault sync enabled
+    // TODO: Check if reminder based item sync needs anything special here.
     async addTodoistTagToFile(filepath: string) {
         // Get the file object and update the content
         const file = this.app.vault.getAbstractFileByPath(filepath)
@@ -145,17 +150,19 @@ export class FileOperation {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
-            if (this.plugin.taskParser?.hasTodoistId(line) && this.plugin.taskParser?.hasTodoistTag(line)) {
-                if (this.plugin.taskParser && this.plugin.taskParser?.hasTodoistLink(line)) {
-                    return
+            if (this.plugin.taskParser?.hasTodoistId(line)) {
+                if (this.plugin.isParseableItem(line)) {
+                    if (this.plugin.taskParser && this.plugin.taskParser?.hasTodoistLink(line)) {
+                        return
+                    }
+                    const taskID = this.plugin.taskParser?.getTodoistIdFromLineText(line)
+                    const taskObject = this.plugin.cacheOperation?.loadTaskFromCacheyID(taskID)
+                    const todoistLink = taskObject.url
+                    const link = `%%tid:: [${taskID}](${todoistLink})%%`
+                    const newLine = this.plugin.taskParser?.addTodoistLink(line, link)
+                    lines[i] = newLine
+                    modified = true
                 }
-                const taskID = this.plugin.taskParser?.getTodoistIdFromLineText(line)
-                const taskObject = this.plugin.cacheOperation?.loadTaskFromCacheyID(taskID)
-                const todoistLink = taskObject.url
-                const link = `%%tid:: [${taskID}](${todoistLink})%%`
-                const newLine = this.plugin.taskParser?.addTodoistLink(line, link)
-                lines[i] = newLine
-                modified = true
             } else {
                 continue
             }
@@ -238,14 +245,16 @@ export class FileOperation {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
-            if (line.includes(taskId) && this.plugin.taskParser?.hasTodoistTag(line)) {
-                const oldTaskContent = this.plugin.taskParser?.getTaskContentFromLineText(line)
-                const newTaskContent = evt.extra_data.content
+            if (line.includes(taskId)) {
+                if (this.plugin.isParseableItem(line)) {
+                    const oldTaskContent = this.plugin.taskParser?.getTaskContentFromLineText(line)
+                    const newTaskContent = evt.extra_data.content
 
-                lines[i] = line.replace(oldTaskContent, newTaskContent)
-                modified = true
-                new Notice(`Content changed for task ${taskId}.`)
-                break
+                    lines[i] = line.replace(oldTaskContent, newTaskContent)
+                    modified = true
+                    new Notice(`Content changed for task ${taskId}.`)
+                    break
+                }
             }
         }
 
@@ -280,57 +289,59 @@ export class FileOperation {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
 
-            if (line.includes(taskId) && this.plugin.taskParser?.hasTodoistTag(line)) {
-                const lineTaskDueDate = this.plugin.taskParser?.getDueDateFromLineText(line) || ""
-                const newTaskDueDate = this.plugin.taskParser?.ISOStringToLocalDateString(evt.extra_data.due_date) || ""
-                const lineTaskTime = this.plugin.taskParser?.getDueTimeFromLineText(line) || ""
-                const newTaskTime = this.plugin.taskParser?.ISOStringToLocalClockTimeString(evt.extra_data.due_date) || ""
-                // TODO needs to consider what to do when the task doesn't have time
-                // TODO how to handle when the task has the new "timeslot" with start + finish time?
+            if (line.includes(taskId)) {
+                if (this.plugin.isParseableItem(line)) {
+                    const lineTaskDueDate = this.plugin.taskParser?.getDueDateFromLineText(line) || ""
+                    const newTaskDueDate = this.plugin.taskParser?.ISOStringToLocalDateString(evt.extra_data.due_date) || ""
+                    const lineTaskTime = this.plugin.taskParser?.getDueTimeFromLineText(line) || ""
+                    const newTaskTime = this.plugin.taskParser?.ISOStringToLocalClockTimeString(evt.extra_data.due_date) || ""
+                    // TODO needs to consider what to do when the task doesn't have time
+                    // TODO how to handle when the task has the new "timeslot" with start + finish time?
 
-                if (this.plugin.taskParser && lineTaskDueDate === "") {
-                    const userDefinedTag = this.plugin.taskParser?.keywords_function("TODOIST_TAG")
-                    const tagWithDateAndSymbol = " 🗓️"+newTaskDueDate+" "+userDefinedTag
-                    lines[i] = lines[i].replace(userDefinedTag,tagWithDateAndSymbol)
-                    modified = true
-                    new Notice(`New due date found for ${taskId}.`)
+                    if (this.plugin.taskParser && lineTaskDueDate === "") {
+                        const userDefinedTag = this.plugin.taskParser?.keywords_function("TODOIST_TAG")
+                        const tagWithDateAndSymbol = " 🗓️" + newTaskDueDate + " " + userDefinedTag
+                        lines[i] = lines[i].replace(userDefinedTag, tagWithDateAndSymbol)
+                        modified = true
+                        new Notice(`New due date found for ${taskId}.`)
+                    }
+
+                    // TODO when a task is created without dueTime, while trying to convert from ISO to local time, it will return 23:59, which is not the best option. So for now this will work
+                    if (lineTaskTime === "" && newTaskTime !== "") {
+                        const userDefinedTag = this.plugin.taskParser?.keywords_function("TODOIST_TAG")
+                        const tagWithTimeAndSymbol = " ⏰" + newTaskTime + " " + userDefinedTag
+                        lines[i] = lines[i].replace(userDefinedTag, tagWithTimeAndSymbol)
+                        modified = true
+                        new Notice(`Due datetime included for ${taskId}.`)
+                    }
+
+
+
+                    if (newTaskDueDate === "") {
+                        //remove 日期from text
+                        const regexRemoveDate = /(🗓️|📅|📆|🗓|@)\s?\d{4}-\d{2}-\d{2}/; //匹配日期🗓️2023-03-07"
+                        lines[i] = line.replace(regexRemoveDate, "")
+                        modified = true
+                        new Notice(`Due date removed from ${taskId}.`)
+                    }
+
+                    if (lineTaskDueDate !== "" && lineTaskDueDate !== newTaskDueDate) {
+                        lines[i] = lines[i].replace(lineTaskDueDate.trim(), newTaskDueDate.trim())
+                        modified = true
+                        new Notice(`Due date for ${taskId} changed to ${newTaskDueDate}.`)
+                    }
+
+
+
+                    if (lineTaskTime !== "" && lineTaskTime !== newTaskTime && newTaskTime !== "23:59") {
+                        lines[i] = lines[i].replace(lineTaskTime.trim(), newTaskTime.trim())
+                        lines[i] = lines[i].replace(lineTaskDueDate.trim(), newTaskDueDate.trim())
+                        modified = true
+                        new Notice(`Due datetime for ${taskId} changed to ${newTaskTime}.`)
+                    }
+
+                    break
                 }
-                
-                // TODO when a task is created without dueTime, while trying to convert from ISO to local time, it will return 23:59, which is not the best option. So for now this will work
-                if (lineTaskTime === "" && newTaskTime !== "") {
-                    const userDefinedTag = this.plugin.taskParser?.keywords_function("TODOIST_TAG")
-                    const tagWithTimeAndSymbol = " ⏰"+newTaskTime+" "+userDefinedTag
-                    lines[i] = lines[i].replace(userDefinedTag,tagWithTimeAndSymbol)
-                    modified = true
-                    new Notice(`Due datetime included for ${taskId}.`)
-                }
-
-
-
-                if (newTaskDueDate === "") {
-                    //remove 日期from text
-                    const regexRemoveDate = /(🗓️|📅|📆|🗓|@)\s?\d{4}-\d{2}-\d{2}/; //匹配日期🗓️2023-03-07"
-                    lines[i] = line.replace(regexRemoveDate, "")
-                    modified = true
-                    new Notice(`Due date removed from ${taskId}.`)
-                }
-
-                if (lineTaskDueDate !== "" && lineTaskDueDate !== newTaskDueDate) {
-                    lines[i] = lines[i].replace(lineTaskDueDate.trim(),newTaskDueDate.trim())
-                    modified = true
-                    new Notice(`Due date for ${taskId} changed to ${newTaskDueDate}.`)
-                }
-
-
-
-                if (lineTaskTime !== "" && lineTaskTime !== newTaskTime && newTaskTime !== "23:59") {
-                    lines[i] = lines[i].replace(lineTaskTime.trim(),newTaskTime.trim())
-                    lines[i] = lines[i].replace(lineTaskDueDate.trim(),newTaskDueDate.trim())
-                    modified = true
-                    new Notice(`Due datetime for ${taskId} changed to ${newTaskTime}.`)
-                }
-
-                break
             }
         }
 
@@ -367,12 +378,14 @@ export class FileOperation {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
-            if (line.includes(taskId) && this.plugin.taskParser?.hasTodoistTag(line)) {
+            if (line.includes(taskId)) {
+                if (this.plugin.isParseableItem(line)) {
                 const indent = '\t'.repeat(line.length - line.trimStart().length + 1);
                 const noteLine = `${indent}- ${datetime} ${note}`;
                 lines.splice(i + 1, 0, noteLine);
                 modified = true
                 break
+                }
             }
         }
 

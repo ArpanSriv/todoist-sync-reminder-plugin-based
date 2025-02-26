@@ -98,13 +98,13 @@ export class TaskParser {
 
         if (project_name) {
             const hasProjectOnCache = this.plugin.cacheOperation?.checkIfProjectExistOnCache(project_name)
-            if(hasProjectOnCache){
+            if (hasProjectOnCache) {
                 projectId = hasProjectOnCache
             }
-            if(!hasProjectOnCache){
+            if (!hasProjectOnCache) {
                 const newProject = await this.plugin.todoistRestAPI?.CreateNewProject(project_name)
                 projectId = newProject?.id
-                if(newProject){
+                if (newProject) {
                     this.plugin.cacheOperation?.addProjectToCache(project_name, newProject?.id)
                 }
             }
@@ -361,7 +361,7 @@ export class TaskParser {
 
         const TaskContent = lineText.replace(regex_remove_rules.remove_inline_metada, "")
             .replace(regex_remove_rules.remove_todoist_tid_link, "")
-            .replace(regex_remove_rules.remove_todoist_tid_applink,"")
+            .replace(regex_remove_rules.remove_todoist_tid_applink, "")
             .replace(regex_remove_rules.remove_priority, " ") //priority 前后必须都有空格，
             .replace(regex_remove_rules.remove_tags, "")
             .replace(regex_remove_rules.remove_date, "")
@@ -405,7 +405,7 @@ export class TaskParser {
         const regex_project_search = /%%\[p::\s*([^\]]+?)\s*\]%%+/g;
         const project = linetext.match(regex_project_search) || [];
 
-        const project_raw = project.toString().replace("%%", "").replace("%%","").replace("[p::","").replace("]","")
+        const project_raw = project.toString().replace("%%", "").replace("%%", "").replace("[p::", "").replace("]", "")
 
         return project_raw
     }
@@ -668,18 +668,18 @@ export class TaskParser {
         return text.replace(tagToLookFor, `📅 ${dueDate} ${tagToLookFor}`);
     }
 
-    insertDueTimeBeforeTodoistTag(text: string, dueTime: string){
+    insertDueTimeBeforeTodoistTag(text: string, dueTime: string) {
         const tagToLookFor = this.keywords_function("TODOIST_TAG")
 
         return text.replace(tagToLookFor, `⏰ ${dueTime} ${tagToLookFor}`)
     }
 
     replaceDueDate(text: string, oldDueDate: string, newDueDate: string) {
-        return text.replace(oldDueDate,newDueDate)
+        return text.replace(oldDueDate, newDueDate)
     }
 
-    replaceDueTime(text:string,oldDueTime:string, newDueTime:string){
-        return text.replace(oldDueTime,newDueTime)
+    replaceDueTime(text: string, oldDueTime: string, newDueTime: string) {
+        return text.replace(oldDueTime, newDueTime)
     }
 
     //extra date from obsidian event
@@ -820,22 +820,54 @@ export class TaskParser {
 
 
     addTodoistLink(linetext: string, todoistLink: string): string {
-        // const regex = new RegExp(`${keywords.TODOIST_TAG}`, "g");
-
-        // Looks for #todoist to identify where to put the link.
-        // TODO let the user choose which tag to use
-        const regex = new RegExp(this.keywords_function("TODOIST_TAG"), "g");
-
-        const date_regex = /(?:🗓️|📅|📆|🗓|@)\s\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b/;
-        const grab_regex_date = new RegExp(date_regex,"g")
-        if(date_regex.test(linetext) && this.plugin.settings.changeDateOrder && !this.plugin.taskParser?.hasTodoistLink) {
-            // TODO check if already has a link, to prevent from adding multiple links
-            return linetext.replace(grab_regex_date, todoistLink + ' ' + '$&');
-        } else {
-            // TODO check if already has a link, to prevent from adding multiple links
-            return linetext.replace(regex, ' ' + '$&' + ' ' + todoistLink);
+        // 1) If line already includes a Todoist link, don't add a second one:
+        if (this.hasTodoistLink(linetext)) {
+            return linetext;
         }
-     
+
+        // Your existing variables/regex:
+        const todoistTagRegex = new RegExp(this.keywords_function("TODOIST_TAG"), "g");
+        const reminderRegex = /(?:🗓️|📅|📆|🗓|@)\s\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?/;
+        // Or pick your own if you want to also handle single-digit months/hours, etc.
+        const reminderRegexGlobal = new RegExp(reminderRegex, "g");
+
+        const strictReminderRegex = /\(@\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?\)/;
+
+        // 2) If the line has your “todoist” tag (#tdsync or custom), keep existing logic
+        if (todoistTagRegex.test(linetext)) {
+            // Reset the regex pointer to avoid partial matches leftover
+            todoistTagRegex.lastIndex = 0;
+
+            // If "changeDateOrder" is on and the line also has a date
+            if (this.plugin.settings.changeDateOrder && reminderRegex.test(linetext)) {
+                // Insert the link in front of the date
+                return linetext.replace(reminderRegexGlobal, todoistLink + ' ' + '$&');
+            } else {
+                // Original logic: place the link next to the #todoist tag
+                return linetext.replace(todoistTagRegex, ' $& ' + todoistLink);
+            }
+        }
+
+        // 3) If the user enabled reminder-based sync and the line matches a reminder
+        if (this.plugin.settings.enableReminderPluginBasedSync && strictReminderRegex.test(linetext)) {
+            if (this.plugin.settings.debugMode) {
+                console.log("reminder based sync logic: Adding tid to task")
+            }
+            // If you want to do the "changeDateOrder" insertion:
+            if (this.plugin.settings.changeDateOrder) {
+                // Insert the link before the date/time
+                return linetext.replace(reminderRegexGlobal, todoistLink + ' ' + '$&');
+            } else {
+                return linetext + ' ' + todoistLink;
+            }
+        }
+
+        if (this.plugin.settings.debugMode) {
+            console.log("no change in task while adding tid :/")
+        }
+
+        // 4) If none of the above, return the line unchanged
+        return linetext;
     }
 
 
@@ -844,5 +876,12 @@ export class TaskParser {
         // TODOIST_LINK:/\[link\]\(.*?\)/,
         const regex_has_todoist_link = new RegExp(/tid:: \[\d+\]\((?:https:\/\/app.todoist.com\/app\/task\/\d+|todoist:\/\/task\?id=\d+)\)/);
         return (regex_has_todoist_link.test(lineText))
+    }
+
+    isReminderTask(lineText: string): boolean {
+        // Matches (@2025-02-25) or (@2025-02-25 13:45), etc.
+        // You can fine-tune the time portion if you wish to allow single-digit hours, etc.
+        const re = /@\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?/;
+        return re.test(lineText);
     }
 }

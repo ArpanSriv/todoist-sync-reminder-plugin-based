@@ -24,9 +24,10 @@ export interface UltimateTodoistSyncSettings {
 	alternativeKeywords: boolean;
 	customSyncTag: string;
 	experimentalFeatures: boolean;
-	changeDateOrder:boolean;
+	changeDateOrder: boolean;
 	linksAppURI: boolean;
-	delayedSync:boolean;
+	delayedSync: boolean;
+	enableReminderPluginBasedSync: boolean;
 }
 
 
@@ -35,7 +36,7 @@ export const DEFAULT_SETTINGS: Partial<UltimateTodoistSyncSettings> = {
 	apiInitialized: false,
 	defaultProjectName: "Inbox",
 	automaticSynchronizationInterval: 150, //default aync interval 300s
-	todoistTasksData: { "projects": [], "tasks": [], "events": []},
+	todoistTasksData: { "projects": [], "tasks": [], "events": [] },
 	fileMetadata: {},
 	enableFullVaultSync: false,
 	statistics: {},
@@ -47,6 +48,7 @@ export const DEFAULT_SETTINGS: Partial<UltimateTodoistSyncSettings> = {
 	changeDateOrder: false,
 	linksAppURI: false,
 	delayedSync: false,
+	enableReminderPluginBasedSync: false,
 }
 
 
@@ -66,7 +68,7 @@ export class AnotherTodoistSyncPluginSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		const myProjectsOptions: MyProject | undefined = this.plugin.settings.todoistTasksData?.projects?.reduce((obj:any, item:any) => {
+		const myProjectsOptions: MyProject | undefined = this.plugin.settings.todoistTasksData?.projects?.reduce((obj: any, item: any) => {
 			obj[(item.id).toString()] = item.name;
 			return obj;
 		}, {});
@@ -96,26 +98,26 @@ export class AnotherTodoistSyncPluginSettingTab extends PluginSettingTab {
 
 			})
 
-			// Debouces the sync interval value, to avoid triggering while the user is still typing
-			const deboucedSyncSave = debounce((sync_interval: number) => {
-				const intervalNum = Number(sync_interval)
-				if (isNaN(intervalNum)) {
-					new Notice(`Wrong type,please enter a number.`)
-					return
-				}
-				if (intervalNum < 20) {
-					new Notice(`The synchronization interval time cannot be less than 20 seconds.`)
-					console.error(`The synchronization interval time cannot be less than 20 seconds.`)
-					return
-				}
-				if (!Number.isInteger(intervalNum)) {
-					new Notice('The synchronization interval must be an integer.');
-					return;
-				}
-				this.plugin.settings.automaticSynchronizationInterval = intervalNum;
-				this.plugin.saveSettings()
-				new Notice('Settings have been updated.');
-			}, 1000,true)
+		// Debouces the sync interval value, to avoid triggering while the user is still typing
+		const deboucedSyncSave = debounce((sync_interval: number) => {
+			const intervalNum = Number(sync_interval)
+			if (isNaN(intervalNum)) {
+				new Notice(`Wrong type,please enter a number.`)
+				return
+			}
+			if (intervalNum < 20) {
+				new Notice(`The synchronization interval time cannot be less than 20 seconds.`)
+				console.error(`The synchronization interval time cannot be less than 20 seconds.`)
+				return
+			}
+			if (!Number.isInteger(intervalNum)) {
+				new Notice('The synchronization interval must be an integer.');
+				return;
+			}
+			this.plugin.settings.automaticSynchronizationInterval = intervalNum;
+			this.plugin.saveSettings()
+			new Notice('Settings have been updated.');
+		}, 1000, true)
 
 
 		new Setting(containerEl)
@@ -355,25 +357,25 @@ export class AnotherTodoistSyncPluginSettingTab extends PluginSettingTab {
 						new Notice('Experimental features have been enabled. Close this window and open again to see the experimental features.')
 					})
 			)
-			
-			// Test if the tag has #, if not, return false
-			function checkTagValue(tag:string) {
-				const tagRegexRule = /#[\w\u4e00-\u9fa5-]+/g
-				const tagRegexTest = tagRegexRule.test(tag)
 
-				if(tagRegexTest){
-					return true
-				} else {
-					return false
-				}
+		// Test if the tag has #, if not, return false
+		function checkTagValue(tag: string) {
+			const tagRegexRule = /#[\w\u4e00-\u9fa5-]+/g
+			const tagRegexTest = tagRegexRule.test(tag)
+
+			if (tagRegexTest) {
+				return true
+			} else {
+				return false
 			}
+		}
 
-			// Debouces the save function for 1 secon to avoid triggering multiple notices
-		const deboucedTagSave = debounce((tag:string) => {
+		// Debouces the save function for 1 secon to avoid triggering multiple notices
+		const deboucedTagSave = debounce((tag: string) => {
 			this.plugin.settings.customSyncTag = tag;
 			this.plugin.saveSettings()
 			new Notice('New custom sync tag have been updated.');
-		},1000,true)
+		}, 1000, true)
 
 		if (this.plugin.settings.experimentalFeatures) {
 			new Setting(containerEl)
@@ -381,22 +383,22 @@ export class AnotherTodoistSyncPluginSettingTab extends PluginSettingTab {
 				.setDesc('Set a custom tag to sync tasks with Todoist. NOTE: Using #todoist might conflict with older version of this plugin')
 				.addText((text) => text.setPlaceholder('Enter custom tag')
 					.setValue(this.plugin.settings.customSyncTag).onChange(async (value) => {
-						const valueCleaned = value.replace(" ","")
+						const valueCleaned = value.replace(" ", "")
 						checkTagValue(valueCleaned)
 
-						if(!checkTagValue(valueCleaned)) {
+						if (!checkTagValue(valueCleaned)) {
 							console.error(`The tag must contain a # symbol and at least 1 character to be considered a valid sync tag.`)
 							new Notice('The tag must contain a # symbol.')
 						}
 
-						if(checkTagValue(valueCleaned)){
+						if (checkTagValue(valueCleaned)) {
 							deboucedTagSave(valueCleaned)
 						}
 
 					}));
 		}
 
-		
+
 		if (this.plugin.settings.experimentalFeatures) {
 			new Setting(containerEl)
 				.setName('Alternative keywords')
@@ -408,12 +410,12 @@ export class AnotherTodoistSyncPluginSettingTab extends PluginSettingTab {
 					}));
 		}
 
-		if (this.plugin.settings.experimentalFeatures){
+		if (this.plugin.settings.experimentalFeatures) {
 			new Setting(containerEl)
 				.setName('Obsidian Tasks Integration')
 				.setDesc('In order to have this plugin properly working with Obsidian Tasks plugin, it has to reorder the link and tid comment.')
 				.addToggle(component =>
-					component.setValue(this.plugin.settings.changeDateOrder).onChange((value) =>{
+					component.setValue(this.plugin.settings.changeDateOrder).onChange((value) => {
 						this.plugin.settings.changeDateOrder = value
 						this.plugin.saveSettings()
 					})
@@ -433,51 +435,65 @@ export class AnotherTodoistSyncPluginSettingTab extends PluginSettingTab {
 		}
 
 		// TODO need to evaluate if this feature is still working after all the new features
-		if(this.plugin.settings.experimentalFeatures){
+		if (this.plugin.settings.experimentalFeatures) {
 			new Setting(containerEl)
-			.setName('Full vault sync')
-			.setDesc('By default, only tasks marked with #todoist are synchronized. If this option is turned on, all tasks in the vault will be synchronized.')
-			.addToggle(component =>
-				component
-				.setValue(this.plugin.settings.enableFullVaultSync)
-				.onChange((value) => {
-					this.plugin.settings.enableFullVaultSync = value
-					this.plugin.saveSettings()
-					new Notice("Full vault sync is enabled.")
-				})
-				
-			)
+				.setName('Full vault sync')
+				.setDesc('By default, only tasks marked with #todoist are synchronized. If this option is turned on, all tasks in the vault will be synchronized.')
+				.addToggle(component =>
+					component
+						.setValue(this.plugin.settings.enableFullVaultSync)
+						.onChange((value) => {
+							this.plugin.settings.enableFullVaultSync = value
+							this.plugin.saveSettings()
+							new Notice("Full vault sync is enabled.")
+						})
+
+				)
 		}
 
 		// Prevent plugin from any sync to prevent issues while Obsidian is indexing files
-		if(this.plugin.settings.experimentalFeatures){
+		if (this.plugin.settings.experimentalFeatures) {
 			new Setting(containerEl)
-			.setName('Delayed first Sync')
-			.setDesc('This will hold any sync for 1 minute, to give Obsidian time to sync all files.')
-			.addToggle(component =>
-				component
-				.setValue(this.plugin.settings.delayedSync)
-				.onChange((value) => {
-					this.plugin.settings.delayedSync = value
-					this.plugin.saveSettings()
-					new Notice("First sync will be delayed by 60 seconds.")
-				})
+				.setName('Delayed first Sync')
+				.setDesc('This will hold any sync for 1 minute, to give Obsidian time to sync all files.')
+				.addToggle(component =>
+					component
+						.setValue(this.plugin.settings.delayedSync)
+						.onChange((value) => {
+							this.plugin.settings.delayedSync = value
+							this.plugin.saveSettings()
+							new Notice("First sync will be delayed by 60 seconds.")
+						})
 
-			)
+				)
+		}
+
+		if (this.plugin.settings.experimentalFeatures) {
+			new Setting(containerEl)
+				.setName("Enable Reminder-Based Tasks")
+				.setDesc("Automatically sync tasks that contain (@YYYY-MM-DD) or (@YYYY-MM-DD HH:MM), without needing #tdsync.")
+				.addToggle(toggle =>
+					toggle
+						.setValue(this.plugin.settings.enableReminderPluginBasedSync)
+						.onChange(async (value) => {
+							this.plugin.settings.enableReminderPluginBasedSync = value;
+							await this.plugin.saveSettings();
+						})
+				);
 		}
 
 		new Setting(containerEl)
-		.setName('Debug mode')
-		.setDesc('Enable this option to log information will on the development console, which can help troubleshoot for errors.')
-		.addToggle(component =>
-			component
-				.setValue(this.plugin.settings.debugMode)
-				.onChange((value) => {
-					this.plugin.settings.debugMode = value
-					this.plugin.saveSettings()
-				})
+			.setName('Debug mode')
+			.setDesc('Enable this option to log information will on the development console, which can help troubleshoot for errors.')
+			.addToggle(component =>
+				component
+					.setValue(this.plugin.settings.debugMode)
+					.onChange((value) => {
+						this.plugin.settings.debugMode = value
+						this.plugin.saveSettings()
+					})
 
-		);
+			);
 	}
 }
 
